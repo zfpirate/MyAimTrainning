@@ -501,7 +501,11 @@ def run_aimtrain_mode(start_mode=None):
                                            font=("Consolas", 11, "bold"))
             self.tag_bind("all", "<Enter>", self._enter)
             self.tag_bind("all", "<Leave>", self._leave)
-            self.tag_bind("all", "<Button-1>", lambda e: self.command())
+            self.tag_bind("all", "<Button-1>", self._click)
+
+        def _click(self, _event):
+            self.command()
+            return "break"
 
         def _enter(self, _):
             self.itemconfig(self.circle, outline=self.hover_color, width=4)
@@ -541,17 +545,15 @@ def run_aimtrain_mode(start_mode=None):
     def show_home():
         clear_buttons()
         RoundBtn(btn_row, "REACTION TIME", lambda: for_destroy(reaction_screen),
-                 radius=58, fg_color=ACCENT_ORANGE).pack(side="top", pady=4)
-        RoundBtn(btn_row, "AIM\nTRAIN", lambda: for_destroy(aimtrain_screen),
-                 radius=58, fg_color=ACCENT_CYAN).pack(side="top", pady=4)
+                 radius=58, fg_color=ACCENT_ORANGE).pack(side="left", padx=8)
         RoundBtn(btn_row, "PRECISION", lambda: for_destroy(lambda: aimtrain_screen(True)),
-             radius=58, fg_color=ACCENT_RED).pack(side="top", pady=4)
+             radius=58, fg_color=ACCENT_RED).pack(side="left", padx=8)
         RoundBtn(btn_row, "FOLLOW", lambda: for_destroy(follow_screen),
-                 radius=58, fg_color=ACCENT_PINK).pack(side="top", pady=4)
+                 radius=58, fg_color=ACCENT_PINK).pack(side="left", padx=8)
         RoundBtn(btn_row, "SENS", lambda: for_destroy(sens_screen),
-                 radius=58, fg_color=ACCENT_GREEN).pack(side="top", pady=4)
+                 radius=58, fg_color=ACCENT_GREEN).pack(side="left", padx=8)
         RoundBtn(btn_row, "STATS", lambda: for_destroy(stats_screen),
-                 radius=58, fg_color=ACCENT_PURPLE).pack(side="top", pady=4)
+                 radius=58, fg_color=ACCENT_PURPLE).pack(side="left", padx=8)
 
         # Show total points + best score
         total = cfg.get("total_points", 0)
@@ -1025,6 +1027,7 @@ def run_aimtrain_mode(start_mode=None):
         state = {
             "hits": 0, "misses": 0, "spawned": 0,
             "shot_pending": False,
+            "last_shot_at": 0.0,
             "started_at": None, "current_start": None,
             "t_yaw": 0.0, "t_pitch": 0.0,
             "reaction_times": [], "running": False,
@@ -1133,6 +1136,10 @@ def run_aimtrain_mode(start_mode=None):
             if (not state["running"] or state["current_start"] is None
                     or state["shot_pending"]):
                 return
+            now = time.perf_counter()
+            if now - state["last_shot_at"] < 0.05:
+                return
+            state["last_shot_at"] = now
             pos = project_target(cam["yaw"], cam["pitch"],
                                  state["t_yaw"], state["t_pitch"],
                                  canvas_w, canvas_h)
@@ -1253,23 +1260,25 @@ def run_aimtrain_mode(start_mode=None):
             if state["running"]:
                 apply_delta(dx, dy)
 
-        raw, ok = attach_raw(canvas, on_delta, shoot)
-        state["raw"] = raw if ok else None
-        if not ok:
-            hint.config(text="Raw mouse unavailable — using cursor move (not 1:1 Valorant)",
-                        fg=ACCENT_ORANGE)
-            last = {"p": None}
+        def start_mouse_input():
+            raw, ok = attach_raw(canvas, on_delta, shoot)
+            state["raw"] = raw if ok else None
+            if not ok:
+                hint.config(text="Raw mouse unavailable — using cursor move (not 1:1 Valorant)",
+                            fg=ACCENT_ORANGE)
+                last = {"p": None}
 
-            def motion(e):
-                if last["p"] is None:
+                def motion(e):
+                    if last["p"] is None:
+                        last["p"] = (e.x, e.y)
+                        return
+                    apply_delta(e.x - last["p"][0], e.y - last["p"][1])
                     last["p"] = (e.x, e.y)
-                    return
-                apply_delta(e.x - last["p"][0], e.y - last["p"][1])
-                last["p"] = (e.x, e.y)
 
-            canvas.bind("<Motion>", motion)
-            canvas.config(cursor="crosshair")
-            canvas.bind("<Button-1>", lambda e: shoot())
+                canvas.bind("<Motion>", motion)
+                canvas.config(cursor="crosshair")
+
+            canvas.bind("<Button-1>", lambda _event: shoot())
 
         def stop_raw(_e=None):
             if state["raw"]:
@@ -1282,6 +1291,7 @@ def run_aimtrain_mode(start_mode=None):
                 return
             state["running"] = True
             start_btn.destroy()
+            start_mouse_input()
             root.after_idle(spawn_target)
             tick_timer()
             root.after(8, redraw)
@@ -1464,22 +1474,23 @@ def run_aimtrain_mode(start_mode=None):
             if state["running"]:
                 apply_delta(dx, dy)
 
-        raw, ok = attach_raw(canvas, on_delta, None)
-        state["raw"] = raw if ok else None
-        if not ok:
-            hint.config(text="Raw mouse unavailable — using cursor move (not 1:1 Valorant)",
-                        fg=ACCENT_ORANGE)
-            last = {"p": None}
+        def start_mouse_input():
+            raw, ok = attach_raw(canvas, on_delta, None)
+            state["raw"] = raw if ok else None
+            if not ok:
+                hint.config(text="Raw mouse unavailable — using cursor move (not 1:1 Valorant)",
+                            fg=ACCENT_ORANGE)
+                last = {"p": None}
 
-            def motion(e):
-                if last["p"] is None:
+                def motion(e):
+                    if last["p"] is None:
+                        last["p"] = (e.x, e.y)
+                        return
+                    apply_delta(e.x - last["p"][0], e.y - last["p"][1])
                     last["p"] = (e.x, e.y)
-                    return
-                apply_delta(e.x - last["p"][0], e.y - last["p"][1])
-                last["p"] = (e.x, e.y)
 
-            canvas.bind("<Motion>", motion)
-            canvas.config(cursor="crosshair")
+                canvas.bind("<Motion>", motion)
+                canvas.config(cursor="crosshair")
 
         def stop_raw(_e=None):
             if state["raw"]:
@@ -1492,6 +1503,7 @@ def run_aimtrain_mode(start_mode=None):
                 return
             state["running"] = True
             start_btn.destroy()
+            start_mouse_input()
             root.after_idle(loop)
 
         start_btn = tk.Button(
@@ -1603,7 +1615,11 @@ def run_gui():
                                            font=("Consolas", 13, "bold"))
             self.tag_bind("all", "<Enter>", self._enter)
             self.tag_bind("all", "<Leave>", self._leave)
-            self.tag_bind("all", "<Button-1>", lambda e: self.command())
+            self.tag_bind("all", "<Button-1>", self._click)
+
+        def _click(self, _event):
+            self.command()
+            return "break"
 
         def _enter(self, _):
             self.itemconfig(self.circle, outline=self.hover_color, width=4)
