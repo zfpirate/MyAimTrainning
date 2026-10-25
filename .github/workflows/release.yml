@@ -1,0 +1,37 @@
+name: Build and publish AIM
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install PyInstaller
+        run: python -m pip install pyinstaller==6.22.3
+
+      - name: Build executable
+        run: python -m PyInstaller --clean --noconfirm --onefile --name AIM aim.py
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: AIM v0.1.${{ github.run_number }}
+          generate_release_notes: true
+          overwrite_files: true
+          files: dist/AIM.exe
