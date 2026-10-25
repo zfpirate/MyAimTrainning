@@ -847,7 +847,10 @@ def run_aimtrain_mode(start_mode=None):
                            outline=fill_outline, fill=fill_outline, tags="target")
 
     def attach_raw(on_delta, on_click):
-        raw = RawMouse(root.winfo_id(), on_delta, on_click)
+        def queue_click():
+            root.after_idle(on_click)
+
+        raw = RawMouse(root.winfo_id(), on_delta, queue_click if on_click else None)
         return raw, raw.start()
 
     def make_play_canvas(parent, accent_color):
@@ -1150,6 +1153,14 @@ def run_aimtrain_mode(start_mode=None):
         )
         start_btn.pack(pady=8, before=canvas.master)
 
+        def start_from_key(_event=None):
+            start_game()
+            return "break"
+
+        start_btn.bind("<Return>", start_from_key)
+        start_btn.bind("<KP_Enter>", start_from_key)
+        start_btn.focus_set()
+
         update_hud()
         draw_crosshair(canvas, canvas_w, canvas_h)
 
@@ -1352,6 +1363,14 @@ def run_aimtrain_mode(start_mode=None):
             relief="flat", bd=0, padx=28, pady=10, cursor="hand2",
         )
         start_btn.pack(pady=8)
+
+        def start_from_key(_event=None):
+            start_follow()
+            return "break"
+
+        start_btn.bind("<Return>", start_from_key)
+        start_btn.bind("<KP_Enter>", start_from_key)
+        start_btn.focus_set()
 
         draw_crosshair(canvas, canvas_w, canvas_h)
 
