@@ -53,6 +53,21 @@ CROSSHAIR_COLORS = {
     "White": FG,
     "Green": ACCENT_GREEN,
 }
+RANK_ORDER = ("BRONZE", "SILVER", "GOLD", "PLATINUM", "DIAMOND", "RADIANT")
+RANK_COLORS = {
+    "BRONZE": ACCENT_ORANGE,
+    "SILVER": GREY,
+    "GOLD": ACCENT_ORANGE,
+    "PLATINUM": ACCENT_CYAN,
+    "DIAMOND": ACCENT_PURPLE,
+    "RADIANT": ACCENT_RED,
+}
+CROSSHAIR_COLORS = {
+    "Blue": ACCENT_CYAN,
+    "Red": ACCENT_RED,
+    "White": FG,
+    "Green": ACCENT_GREEN,
+}
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -99,6 +114,7 @@ def load_cfg():
         "crosshair_length": 15,
         "crosshair_gap": 6,
         "crosshair_dot": True,
+        "best_ranks": {},
     }
 
 def save_cfg(cfg):
@@ -114,6 +130,40 @@ def get_valo_settings(cfg=None):
     dpi = max(100.0, min(32000.0, dpi))
     sens = max(0.001, min(10.0, sens))
     return dpi, sens
+
+def accuracy_rank(accuracy):
+    if accuracy >= 95:
+        return "RADIANT"
+    if accuracy >= 90:
+        return "DIAMOND"
+    if accuracy >= 82:
+        return "PLATINUM"
+    if accuracy >= 72:
+        return "GOLD"
+    if accuracy >= 55:
+        return "SILVER"
+    return "BRONZE"
+
+def reaction_rank(avg_ms):
+    if avg_ms <= 180:
+        return "RADIANT"
+    if avg_ms <= 210:
+        return "DIAMOND"
+    if avg_ms <= 240:
+        return "PLATINUM"
+    if avg_ms <= 280:
+        return "GOLD"
+    if avg_ms <= 340:
+        return "SILVER"
+    return "BRONZE"
+
+def save_best_rank(cfg, game, rank):
+    best_ranks = cfg.setdefault("best_ranks", {})
+    previous = best_ranks.get(game)
+    if previous not in RANK_ORDER or RANK_ORDER.index(rank) > RANK_ORDER.index(previous):
+        best_ranks[game] = rank
+    log(f"Rank updated: game={game}, earned={rank}, best={best_ranks[game]}")
+    return best_ranks[game]
 
 def valo_cm_per_360(dpi=None, sens=None):
     dpi = VALO_DPI if dpi is None else dpi
@@ -439,7 +489,7 @@ class WinMouse:
         self._pending[1] += raw.mouse.lLastY
         flags = raw.mouse.u.buttons.usButtonFlags
         if flags & RI_MOUSE_LEFT_BUTTON_DOWN:
-            log("Raw mouse left-click received")
+            log(f"WinMouse WndProc received left button; flags=0x{flags:04X}")
             self._clicks += 1
 
 # ═══════════════════════════════════════════════════════════
@@ -791,6 +841,10 @@ def run_aimtrain_mode(start_mode=None):
             ("Avg of best", f"{avg_best:.0f} pts"),
             ("Best reaction", f"{cfg.get('best_reaction_ms') or 0:.0f} ms"),
             ("Best follow", f"{cfg.get('best_follow') or 0:.0f}%"),
+            ("Aim Train rank", cfg.get("best_ranks", {}).get("aim_train", "N/A")),
+            ("Precision rank", cfg.get("best_ranks", {}).get("precision", "N/A")),
+            ("Follow rank", cfg.get("best_ranks", {}).get("follow", "N/A")),
+            ("Reaction rank", cfg.get("best_ranks", {}).get("reaction", "N/A")),
         ]
         for k, v in rows:
             r = tk.Frame(box, bg=BG2)
@@ -824,6 +878,7 @@ def run_aimtrain_mode(start_mode=None):
             cfg["high_scores"] = []
             cfg["precision_scores"] = []
             cfg["aim_scores"] = []
+            cfg["best_ranks"] = {}
             save_cfg(cfg)
             clear_content()
             stats_screen()
@@ -948,6 +1003,8 @@ def run_aimtrain_mode(start_mode=None):
             avg = sum(times) / len(times)
             best = min(times)
             worst = max(times)
+            rank = reaction_rank(avg)
+            save_best_rank(cfg, "reaction", rank)
             mean = avg
             var = sum((t - mean) ** 2 for t in times) / len(times)
             std = math.sqrt(var)
@@ -959,6 +1016,7 @@ def run_aimtrain_mode(start_mode=None):
                            highlightbackground=ACCENT_ORANGE)
             box.pack(pady=12, ipadx=40, ipady=16)
             rows = [
+                ("Rank", rank),
                 ("Average", f"{avg:.0f} ms"),
                 ("Best", f"{best:.0f} ms"),
                 ("Worst", f"{worst:.0f} ms"),
@@ -1087,6 +1145,7 @@ def run_aimtrain_mode(start_mode=None):
             if (dx or dy) and on_delta:
                 on_delta(dx, dy)
             if clicked and on_click:
+                log("WinMouse poll dispatched click to game handler")
                 on_click()
             if raw._active:
                 root.after(8, poll)
@@ -1228,13 +1287,15 @@ def run_aimtrain_mode(start_mode=None):
                 timer_lbl.config(text=f"{time.perf_counter() - state['started_at']:.1f}s")
             root.after(100, tick_timer)
 
-        def shoot():
+        def shoot(source="unknown"):
+            log(f"Click entered shoot handler; source={source}, running={state['running']}, target_ready={state['current_start'] is not None}, pending={state['shot_pending']}")
             if (not state["running"] or state["current_start"] is None
                     or state["shot_pending"]):
                 log(f"Shot ignored: running={state['running']}, target_ready={state['current_start'] is not None}, shot_pending={state['shot_pending']}", "DEBUG")
                 return
             now = time.perf_counter()
             if now - state["last_shot_at"] < 0.05:
+                log(f"Click ignored by duplicate guard; source={source}", "DEBUG")
                 return
             state["last_shot_at"] = now
             pos = project_target(cam["yaw"], cam["pitch"],
@@ -1247,7 +1308,7 @@ def run_aimtrain_mode(start_mode=None):
                 hit = math.hypot(pos[0] - cx, pos[1] - cy) <= hit_radius
             react = time.perf_counter() - state["current_start"]
             offset = (round(pos[0] - cx, 1), round(pos[1] - cy, 1)) if pos else None
-            log(f"Shot result: {'HIT' if hit else 'MISS'}, target_offset={offset}, hit_radius={hit_radius:.1f}px, reaction={react * 1000:.1f}ms")
+            log(f"Shot result: {'HIT' if hit else 'MISS'}, source={source}, target_offset={offset}, hit_radius={hit_radius:.1f}px, reaction={react * 1000:.1f}ms")
             if hit:
                 state["shot_pending"] = True
                 state["hits"] += 1
@@ -1267,10 +1328,12 @@ def run_aimtrain_mode(start_mode=None):
                                    fill=ACCENT_CYAN, tags="flash")
                 root.after(280, lambda: canvas.delete("flash"))
                 update_hud()
+                log(f"Hit accepted; scheduling target {state['spawned'] + 1}/{TOTAL_TARGETS} in 80ms")
                 root.after(80, spawn_target)
             else:
                 state["misses"] += 1
                 state["combo"] = 0
+                log(f"Miss recorded; target {state['spawned']}/{TOTAL_TARGETS} remains active")
                 canvas.create_text(cx, cy - 36, text="MISS",
                                    font=("Consolas", 12, "bold"),
                                    fill=ACCENT_RED, tags="flash")
@@ -1286,6 +1349,9 @@ def run_aimtrain_mode(start_mode=None):
             canvas.delete("target")
             total_shots = state["hits"] + state["misses"]
             accuracy = (state["hits"] / total_shots * 100) if total_shots else 0
+            rank = accuracy_rank(accuracy)
+            rank_key = "precision" if precision else "aim_train"
+            save_best_rank(cfg, rank_key, rank)
             total_time = (time.perf_counter() - state["started_at"]
                           if state["started_at"] else 0)
             avg_react = (sum(state["reaction_times"]) / len(state["reaction_times"]) * 1000
@@ -1314,6 +1380,7 @@ def run_aimtrain_mode(start_mode=None):
             box.pack(pady=10, ipadx=50, ipady=16)
             rows = [
                 ("Targets hit", f"{state['hits']} / {TOTAL_TARGETS}"),
+                ("Rank", rank),
                 ("Misses", str(state["misses"])),
                 ("Accuracy", f"{accuracy:.1f}%"),
                 ("Max combo", f"x{state['max_combo']}"),
@@ -1361,7 +1428,7 @@ def run_aimtrain_mode(start_mode=None):
                 apply_delta(dx, dy)
 
         def start_mouse_input():
-            raw, ok = attach_raw(canvas, on_delta, shoot)
+            raw, ok = attach_raw(canvas, on_delta, lambda: shoot("WinMouse poll"))
             state["raw"] = raw if ok else None
             log(f"Raw mouse input {'started' if ok else 'unavailable'} for {'PRECISION' if precision else 'AIM TRAIN'}")
             if not ok:
@@ -1379,7 +1446,11 @@ def run_aimtrain_mode(start_mode=None):
                 canvas.bind("<Motion>", motion)
                 canvas.config(cursor="crosshair")
 
-            canvas.bind("<Button-1>", lambda _event: shoot())
+            def on_canvas_shot(_event):
+                shoot("Tk canvas")
+                return "break"
+
+            canvas.bind("<Button-1>", on_canvas_shot)
 
         def stop_raw(_e=None):
             if state["raw"]:
@@ -1466,7 +1537,7 @@ def run_aimtrain_mode(start_mode=None):
 
         def target_pos(t):
             yaw = 16.0 * math.sin(t * 0.85)
-            pitch = 7.0 * math.sin(t * 0.55 + 0.8)
+            pitch = 7.0 * math.sin(t * 0.55)
             return yaw, pitch
 
         def finish_follow():
@@ -1478,6 +1549,8 @@ def run_aimtrain_mode(start_mode=None):
                 state["raw"].stop()
                 state["raw"] = None
             pct = (state["on_frames"] / state["tot_frames"] * 100.0) if state["tot_frames"] else 0
+            rank = accuracy_rank(pct)
+            save_best_rank(cfg, "follow", rank)
             pts = int(pct * 20 + state["max_streak"] * 2)
             cfg["total_points"] = cfg.get("total_points", 0) + pts
             prev = cfg.get("best_follow")
@@ -1498,6 +1571,7 @@ def run_aimtrain_mode(start_mode=None):
                            highlightbackground=ACCENT_PINK)
             box.pack(pady=10, ipadx=50, ipady=16)
             rows = [
+                ("Rank", rank),
                 ("Time on target", f"{pct:.1f}%"),
                 ("Best streak", f"{state['max_streak'] / 60.0:.1f}s"),
                 ("Points", f"{pts:,}"),
