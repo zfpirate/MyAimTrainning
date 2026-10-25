@@ -32,6 +32,8 @@ VALO_FOV_H = 103.0  # Valorant default horizontal FOV
 
 MODE_AIMTRAIN = "aimtrain"
 MODE_FOLLOW = "follow"
+MODE_PLAY = "play"
+MODE_SETTINGS = "settings"
 
 BG = "#081526"
 BG2 = "#10243a"
@@ -44,6 +46,12 @@ ACCENT_GREEN = "#59d7b8"
 ACCENT_PURPLE = "#83a8ff"
 GREY = "#91a6bd"
 DARKGREY = "#19334e"
+CROSSHAIR_COLORS = {
+    "Blue": ACCENT_CYAN,
+    "Red": ACCENT_RED,
+    "White": FG,
+    "Green": ACCENT_GREEN,
+}
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -80,6 +88,10 @@ def load_cfg():
         "total_launches": 0,
         "valo_dpi": VALO_DPI,
         "valo_sens": VALO_SENS,
+        "crosshair_color": "Blue",
+        "crosshair_length": 15,
+        "crosshair_gap": 6,
+        "crosshair_dot": True,
     }
 
 def save_cfg(cfg):
@@ -395,6 +407,10 @@ def run_aimtrain_mode(start_mode=None):
             w.destroy()
 
     def go_back():
+        if start_mode == MODE_SETTINGS:
+            release_mouse()
+            root.destroy()
+            return
         clear_content()
         clear_buttons()
         show_home()
@@ -414,8 +430,6 @@ def run_aimtrain_mode(start_mode=None):
              radius=58, fg_color=ACCENT_RED).pack(side="left", padx=10)
         RoundBtn(btn_row, "FOLLOW", lambda: for_destroy(follow_screen),
                  radius=58, fg_color=ACCENT_PINK).pack(side="left", padx=10)
-        RoundBtn(btn_row, "SENS", lambda: for_destroy(sens_screen),
-                 radius=58, fg_color=ACCENT_GREEN).pack(side="left", padx=10)
         RoundBtn(btn_row, "STATS", lambda: for_destroy(stats_screen),
                  radius=58, fg_color=ACCENT_PURPLE).pack(side="left", padx=10)
 
@@ -453,9 +467,9 @@ def run_aimtrain_mode(start_mode=None):
     def sens_screen():
         clear_buttons()
         dpi, sens = get_valo_settings(cfg)
-        tk.Label(content, text="VALORANT SENS",
+        tk.Label(content, text="SETTINGS",
                  font=("Consolas", 20, "bold"), fg=accent, bg=BG).pack(pady=10)
-        tk.Label(content, text="Same formula as in-game: degrees = counts × 0.07 × sens  ·  FOV 103",
+        tk.Label(content, text="Mouse sensitivity and crosshair",
                  font=("Consolas", 10), fg=GREY, bg=BG).pack()
 
         box = tk.Frame(content, bg=BG2, highlightthickness=1,
@@ -486,6 +500,57 @@ def run_aimtrain_mode(start_mode=None):
             live_labels[k] = tk.Label(r, text="—", font=("Consolas", 12, "bold"),
                                       fg=FG, bg=BG2, anchor="w")
             live_labels[k].pack(side="left")
+
+        reticle_box = tk.Frame(content, bg=BG2, highlightthickness=1,
+                               highlightbackground=ACCENT_RED)
+        reticle_box.pack(pady=8, ipadx=18, ipady=8)
+        tk.Label(reticle_box, text="CROSSHAIR",
+                 font=("Consolas", 11, "bold"), fg=ACCENT_RED,
+                 bg=BG2).pack(anchor="w", padx=12, pady=(4, 0))
+
+        reticle_row = tk.Frame(reticle_box, bg=BG2)
+        reticle_row.pack(fill="x", padx=10, pady=5)
+        tk.Label(reticle_row, text="Color", font=("Consolas", 10),
+                 fg=GREY, bg=BG2).pack(side="left", padx=(0, 8))
+        crosshair_color_var = tk.StringVar(
+            value=cfg.get("crosshair_color", "Blue")
+        )
+        color_menu = tk.OptionMenu(
+            reticle_row, crosshair_color_var, *CROSSHAIR_COLORS.keys()
+        )
+        color_menu.config(
+            bg=DARKGREY, fg=FG, activebackground=ACCENT_CYAN,
+            activeforeground=BG, relief="flat", highlightthickness=0,
+        )
+        color_menu["menu"].config(bg=BG2, fg=FG, activebackground=ACCENT_CYAN)
+        color_menu.pack(side="left", padx=(0, 18))
+
+        crosshair_length_var = tk.IntVar(
+            value=int(cfg.get("crosshair_length", 15))
+        )
+        crosshair_gap_var = tk.IntVar(value=int(cfg.get("crosshair_gap", 6)))
+        crosshair_dot_var = tk.BooleanVar(
+            value=bool(cfg.get("crosshair_dot", True))
+        )
+        tk.Scale(
+            reticle_row, label="Length", variable=crosshair_length_var,
+            from_=6, to=24, orient="horizontal", length=150,
+            bg=BG2, fg=FG, troughcolor=DARKGREY,
+            activebackground=ACCENT_CYAN, highlightthickness=0,
+            showvalue=True,
+        ).pack(side="left", padx=4)
+        tk.Scale(
+            reticle_row, label="Center gap", variable=crosshair_gap_var,
+            from_=0, to=12, orient="horizontal", length=150,
+            bg=BG2, fg=FG, troughcolor=DARKGREY,
+            activebackground=ACCENT_CYAN, highlightthickness=0,
+            showvalue=True,
+        ).pack(side="left", padx=4)
+        tk.Checkbutton(
+            reticle_box, text="Center dot", variable=crosshair_dot_var,
+            font=("Consolas", 10), fg=FG, bg=BG2, selectcolor=DARKGREY,
+            activebackground=BG2, activeforeground=FG,
+        ).pack(anchor="w", padx=12, pady=(0, 4))
 
         hint = tk.Label(content, text="", font=("Consolas", 10), fg=GREY, bg=BG)
         hint.pack(pady=4)
@@ -525,6 +590,10 @@ def run_aimtrain_mode(start_mode=None):
             d, s = vals
             cfg["valo_dpi"] = d
             cfg["valo_sens"] = s
+            cfg["crosshair_color"] = crosshair_color_var.get()
+            cfg["crosshair_length"] = crosshair_length_var.get()
+            cfg["crosshair_gap"] = crosshair_gap_var.get()
+            cfg["crosshair_dot"] = crosshair_dot_var.get()
             save_cfg(cfg)
             refresh_header()
             hint.config(text=f"Saved · {d:.0f} DPI / {s}  — used in AIM TRAIN and FOLLOW",
@@ -1378,6 +1447,8 @@ def run_aimtrain_mode(start_mode=None):
         root.after_idle(follow_screen)
     elif start_mode == MODE_AIMTRAIN:
         root.after_idle(aimtrain_screen)
+    elif start_mode == MODE_SETTINGS:
+        root.after_idle(sens_screen)
     else:
         show_home()
     root.mainloop()
@@ -1387,7 +1458,11 @@ def run_aimtrain_mode(start_mode=None):
 # ═══════════════════════════════════════════════════════════
 
 def run_mode(mode):
-    if mode == MODE_AIMTRAIN:
+    if mode == MODE_PLAY:
+        run_aimtrain_mode()
+    elif mode == MODE_SETTINGS:
+        run_aimtrain_mode(start_mode=MODE_SETTINGS)
+    elif mode == MODE_AIMTRAIN:
         run_aimtrain_mode(start_mode=MODE_AIMTRAIN)
     elif mode == MODE_FOLLOW:
         run_aimtrain_mode(start_mode=MODE_FOLLOW)
@@ -1478,7 +1553,7 @@ def run_gui():
             self.itemconfig(self.inner, fill="")
 
     root = tk.Tk()
-    root.title(f"AIM SUITE v{VERSION}")
+    root.title(f"AIM.exe v{VERSION}")
     root.configure(bg=BG)
     root.resizable(False, False)
 
@@ -1498,6 +1573,14 @@ def run_gui():
                        font=("Consolas", 10),
                        fg=GREY, bg=BG)
 
+    def on_update_click():
+        status.config(text="running update...", fg=ACCENT_ORANGE)
+        if run_update():
+            status.config(text="update launched", fg=ACCENT_CYAN)
+            root.after(1000, root.destroy)
+        else:
+            status.config(text="update could not be started", fg=ACCENT_RED)
+
     def launch(mode):
         exe = sys.executable
         try:
@@ -1513,10 +1596,12 @@ def run_gui():
 
     row = tk.Frame(root, bg=BG)
     row.pack(pady=10)
-    RoundBtn(row, "AIM\nTRAIN", lambda: launch(MODE_AIMTRAIN),
-             radius=90, fg_color=ACCENT_CYAN).pack(side="left", padx=30)
-    RoundBtn(row, "FOLLOW", lambda: launch(MODE_FOLLOW),
-             radius=90, fg_color=ACCENT_PINK).pack(side="left", padx=30)
+    RoundBtn(row, "PLAY", lambda: launch(MODE_PLAY),
+             radius=74, fg_color=ACCENT_CYAN).pack(side="left", padx=10)
+    RoundBtn(row, "SETTINGS", lambda: launch(MODE_SETTINGS),
+             radius=74, fg_color=ACCENT_RED).pack(side="left", padx=10)
+    RoundBtn(row, "UPDATE", on_update_click,
+             radius=74, fg_color=ACCENT_PINK).pack(side="left", padx=10)
 
     # Total points displayed on launcher
     cfg = load_cfg()
@@ -1526,27 +1611,6 @@ def run_gui():
     tk.Label(pts_row, text=f"★ {total:,} points total",
              font=("Consolas", 12, "bold"),
              fg=ACCENT_ORANGE, bg=BG).pack()
-
-    tk.Frame(root, bg=BG, height=20).pack()
-
-    upd_row = tk.Frame(root, bg=BG)
-    upd_row.pack(pady=15)
-
-    def on_update_click():
-        status.config(text="running update...", fg=ACCENT_ORANGE)
-        if run_update():
-            status.config(text="update launched", fg=ACCENT_CYAN)
-            root.after(1000, root.destroy)
-        else:
-            status.config(text="update could not be started", fg=ACCENT_RED)
-
-    tk.Button(upd_row, text="⟳  UPDATE",
-              command=on_update_click,
-              font=("Consolas", 12, "bold"),
-              fg=ACCENT_ORANGE, bg=BG2,
-              activebackground=DARKGREY, activeforeground=ACCENT_ORANGE,
-              relief="flat", bd=0, padx=30, pady=10,
-              cursor="hand2").pack()
 
     status.pack(side="bottom", pady=15)
 

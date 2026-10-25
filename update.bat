@@ -4,6 +4,7 @@ cd /d "%~dp0"
 
 set "APP_EXE=AIM.exe"
 set "UPDATE_EXE=AIM.update.exe"
+set "APP_PATH=%~dp0%APP_EXE%"
 
 echo Downloading the latest AIM.exe from GitHub...
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -22,14 +23,16 @@ move /Y "%UPDATE_EXE%" "%APP_EXE%" >NUL
 if errorlevel 1 goto replace_failed
 
 echo Update complete. Relaunching %APP_EXE%...
-start "" "%APP_EXE%"
+if not exist "%APP_PATH%" goto launch_failed
+start "" /D "%~dp0" "%APP_PATH%"
+if errorlevel 1 goto launch_failed
 exit /b 0
 
 :update_failed
 echo.
 echo Download or verification failed. The existing executable was not replaced.
 pause
-if exist "%APP_EXE%" start "" "%APP_EXE%"
+if exist "%APP_PATH%" start "" /D "%~dp0" "%APP_PATH%"
 exit /b 1
 
 :replace_failed
@@ -37,5 +40,12 @@ echo.
 echo Could not replace %APP_EXE%. The existing executable was not replaced.
 del /q "%UPDATE_EXE%" 2>NUL
 pause
-if exist "%APP_EXE%" start "" "%APP_EXE%"
+if exist "%APP_PATH%" start "" /D "%~dp0" "%APP_PATH%"
+exit /b 1
+
+:launch_failed
+echo.
+echo The update completed, but Windows could not start %APP_EXE%.
+echo Start it manually from: %APP_PATH%
+pause
 exit /b 1
