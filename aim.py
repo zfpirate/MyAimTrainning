@@ -277,13 +277,46 @@ def run_aimtrain_mode(start_mode=None):
     root.title(f"AIM TRAINER v{VERSION}")
     root.configure(bg=BG)
 
+    cursor_capture = {"canvas": None}
+
+    def release_mouse(clear=True):
+        if clear:
+            cursor_capture["canvas"] = None
+        try:
+            ctypes.windll.user32.ClipCursor(None)
+        except Exception:
+            pass
+
+    def confine_mouse(canvas):
+        cursor_capture["canvas"] = canvas
+        try:
+            canvas.update_idletasks()
+            x, y = canvas.winfo_rootx(), canvas.winfo_rooty()
+            rect = wintypes.RECT(
+                x, y, x + max(canvas.winfo_width(), 2),
+                y + max(canvas.winfo_height(), 2),
+            )
+            return bool(ctypes.windll.user32.ClipCursor(ctypes.byref(rect)))
+        except Exception:
+            return False
+
+    def restore_mouse_on_focus(_event=None):
+        canvas = cursor_capture["canvas"]
+        if canvas is not None and canvas.winfo_exists():
+            root.after_idle(lambda: confine_mouse(canvas))
+
+    root.bind("<FocusOut>", lambda _event: release_mouse(clear=False), add="+")
+    root.bind("<FocusIn>", restore_mouse_on_focus, add="+")
+    root.bind("<Escape>", lambda _event: (release_mouse(), root.destroy()))
+    root.protocol("WM_DELETE_WINDOW", lambda: (release_mouse(), root.destroy()))
+
     try:
         root.attributes("-fullscreen", True)
     except Exception:
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         root.geometry(f"{sw}x{sh}+0+0")
 
-    root.bind("<Escape>", lambda e: root.destroy())
+    root.bind("<Escape>", lambda _event: (release_mouse(), root.destroy()))
 
     accent = random.choice([ACCENT_CYAN, ACCENT_PINK, ACCENT_GREEN, ACCENT_ORANGE])
 
@@ -841,7 +874,7 @@ def run_aimtrain_mode(start_mode=None):
             "shot_pending": False,
             "started_at": None, "current_start": None,
             "t_yaw": 0.0, "t_pitch": 0.0,
-            "reaction_times": [], "running": True,
+            "reaction_times": [], "running": False,
             "score": 0, "combo": 0, "max_combo": 0,
             "raw": None,
         }
@@ -987,6 +1020,7 @@ def run_aimtrain_mode(start_mode=None):
 
         def finish_game():
             state["running"] = False
+            release_mouse()
             if state["raw"]:
                 state["raw"].stop()
                 state["raw"] = None
@@ -1086,16 +1120,34 @@ def run_aimtrain_mode(start_mode=None):
             canvas.bind("<Button-1>", lambda e: shoot())
 
         def stop_raw(_e=None):
+            release_mouse()
             if state["raw"]:
                 state["raw"].stop()
                 state["raw"] = None
         content.bind("<Destroy>", lambda e: stop_raw() if e.widget is content else None)
 
+        def start_game():
+            if state["running"]:
+                return
+            state["running"] = True
+            start_btn.destroy()
+            if state["raw"]:
+                confine_mouse(canvas)
+            root.after_idle(spawn_target)
+            tick_timer()
+            root.after(8, redraw)
+
+        start_btn = tk.Button(
+            content, text="START PRECISION" if precision else "START AIM TRAIN",
+            command=start_game, font=("Consolas", 12, "bold"),
+            fg=ACCENT_CYAN, bg=BG2, activebackground=DARKGREY,
+            activeforeground=ACCENT_CYAN, relief="flat", bd=0,
+            padx=28, pady=10, cursor="hand2",
+        )
+        start_btn.pack(pady=8)
+
         update_hud()
-        tick_timer()
         draw_crosshair(canvas, canvas_w, canvas_h)
-        root.after_idle(spawn_target)
-        root.after(8, redraw)
 
     # ═══════════════════════════════════════════════════
     #  FOLLOW — simple tracking
@@ -1109,7 +1161,7 @@ def run_aimtrain_mode(start_mode=None):
 
         cam, apply_delta = make_camera()
         state = {
-            "running": True, "started_at": None,
+            "running": False, "started_at": None,
             "on_frames": 0, "tot_frames": 0,
             "score": 0, "streak": 0, "max_streak": 0,
             "raw": None, "t_yaw": 0.0, "t_pitch": 0.0,
@@ -1151,6 +1203,7 @@ def run_aimtrain_mode(start_mode=None):
             if not state["running"]:
                 return
             state["running"] = False
+            release_mouse()
             if state["raw"]:
                 state["raw"].stop()
                 state["raw"] = None
@@ -1273,13 +1326,30 @@ def run_aimtrain_mode(start_mode=None):
             canvas.config(cursor="crosshair")
 
         def stop_raw(_e=None):
+            release_mouse()
             if state["raw"]:
                 state["raw"].stop()
                 state["raw"] = None
         content.bind("<Destroy>", lambda e: stop_raw() if e.widget is content else None)
 
+        def start_follow():
+            if state["running"]:
+                return
+            state["running"] = True
+            start_btn.destroy()
+            if state["raw"]:
+                confine_mouse(canvas)
+            root.after_idle(loop)
+
+        start_btn = tk.Button(
+            content, text="START FOLLOW", command=start_follow,
+            font=("Consolas", 12, "bold"), fg=ACCENT_PINK, bg=BG2,
+            activebackground=DARKGREY, activeforeground=ACCENT_PINK,
+            relief="flat", bd=0, padx=28, pady=10, cursor="hand2",
+        )
+        start_btn.pack(pady=8)
+
         draw_crosshair(canvas, canvas_w, canvas_h)
-        root.after_idle(loop)
 
     if start_mode == MODE_FOLLOW:
         root.after_idle(follow_screen)
