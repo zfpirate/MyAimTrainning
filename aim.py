@@ -80,6 +80,11 @@ def log(msg, level="INFO"):
         print(line, flush=True)
     except Exception:
         pass
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
 
 def set_console_visible(visible):
     if os.name != "nt":
@@ -100,11 +105,6 @@ def configure_console_mode():
         enabled = bool(load_cfg().get("developer_mode", False))
         set_console_visible(enabled)
         log(f"Developer mode: {'ON' if enabled else 'OFF'}")
-    try:
-        with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-    except Exception:
-        pass
 
 def load_cfg():
     if CONFIG_FILE.exists():
@@ -129,6 +129,9 @@ def load_cfg():
         "crosshair_length": 15,
         "crosshair_gap": 6,
         "crosshair_dot": True,
+        "crosshair_style": "Four arms",
+        "crosshair_thickness": 2,
+        "crosshair_outline": True,
         "best_ranks": {},
         "developer_mode": False,
     }
@@ -495,6 +498,9 @@ def run_aimtrain_mode(start_mode=None):
 
     def go_back():
         release_mouse()
+        if start_mode == MODE_SETTINGS:
+            root.destroy()
+            return
         clear_content()
         clear_buttons()
         show_home()
@@ -614,6 +620,15 @@ def run_aimtrain_mode(start_mode=None):
         crosshair_dot_var = tk.BooleanVar(
             value=bool(cfg.get("crosshair_dot", True))
         )
+        crosshair_style_var = tk.StringVar(
+            value=cfg.get("crosshair_style", "Four arms")
+        )
+        crosshair_thickness_var = tk.IntVar(
+            value=int(cfg.get("crosshair_thickness", 2))
+        )
+        crosshair_outline_var = tk.BooleanVar(
+            value=bool(cfg.get("crosshair_outline", True))
+        )
         preview = tk.Canvas(
             reticle_box, width=190, height=72, bg=BG,
             highlightthickness=1, highlightbackground=DARKGREY,
@@ -627,6 +642,9 @@ def run_aimtrain_mode(start_mode=None):
                 length=crosshair_length_var.get(),
                 gap=crosshair_gap_var.get(),
                 dot=crosshair_dot_var.get(),
+                style=crosshair_style_var.get(),
+                thickness=crosshair_thickness_var.get(),
+                outline=crosshair_outline_var.get(),
             )
 
         tk.Scale(
@@ -643,8 +661,31 @@ def run_aimtrain_mode(start_mode=None):
             activebackground=ACCENT_CYAN, highlightthickness=0,
             showvalue=True,
         ).pack(side="left", padx=4)
+        style_row = tk.Frame(reticle_box, bg=BG2)
+        style_row.pack(fill="x", padx=10, pady=3)
+        tk.Label(style_row, text="Shape", font=("Consolas", 10),
+                 fg=GREY, bg=BG2).pack(side="left", padx=(0, 8))
+        style_menu = tk.OptionMenu(
+            style_row, crosshair_style_var, "Four arms", "Plus", "Dot"
+        )
+        style_menu.config(bg=DARKGREY, fg=FG, activebackground=ACCENT_CYAN,
+                          activeforeground=BG, relief="flat", highlightthickness=0)
+        style_menu["menu"].config(bg=BG2, fg=FG, activebackground=ACCENT_CYAN)
+        style_menu.pack(side="left", padx=(0, 12))
+        tk.Scale(
+            style_row, label="Thickness", variable=crosshair_thickness_var,
+            from_=1, to=5, orient="horizontal", length=150,
+            bg=BG2, fg=FG, troughcolor=DARKGREY,
+            activebackground=ACCENT_CYAN, highlightthickness=0,
+            showvalue=True,
+        ).pack(side="left", padx=4)
         tk.Checkbutton(
             reticle_box, text="Center dot", variable=crosshair_dot_var,
+            font=("Consolas", 10), fg=FG, bg=BG2, selectcolor=DARKGREY,
+            activebackground=BG2, activeforeground=FG,
+        ).pack(anchor="w", padx=12, pady=(0, 4))
+        tk.Checkbutton(
+            reticle_box, text="Outline", variable=crosshair_outline_var,
             font=("Consolas", 10), fg=FG, bg=BG2, selectcolor=DARKGREY,
             activebackground=BG2, activeforeground=FG,
         ).pack(anchor="w", padx=12, pady=(0, 4))
@@ -674,7 +715,8 @@ def run_aimtrain_mode(start_mode=None):
         ).pack(anchor="w", padx=12, pady=(0, 4))
         for setting_var in (
             crosshair_color_var, crosshair_length_var,
-            crosshair_gap_var, crosshair_dot_var,
+            crosshair_gap_var, crosshair_dot_var, crosshair_style_var,
+            crosshair_thickness_var, crosshair_outline_var,
         ):
             setting_var.trace_add("write", refresh_crosshair_preview)
         refresh_crosshair_preview()
@@ -721,6 +763,9 @@ def run_aimtrain_mode(start_mode=None):
             cfg["crosshair_length"] = crosshair_length_var.get()
             cfg["crosshair_gap"] = crosshair_gap_var.get()
             cfg["crosshair_dot"] = crosshair_dot_var.get()
+            cfg["crosshair_style"] = crosshair_style_var.get()
+            cfg["crosshair_thickness"] = crosshair_thickness_var.get()
+            cfg["crosshair_outline"] = crosshair_outline_var.get()
             save_cfg(cfg)
             refresh_header()
             hint.config(text=f"Saved · {d:.0f} DPI / {s}  — used in AIM TRAIN and FOLLOW",
@@ -1030,19 +1075,40 @@ def run_aimtrain_mode(start_mode=None):
 
         return cam, apply_delta
 
-    def draw_crosshair(canvas, w, h, color=None, length=None, gap=None, dot=None):
+    def draw_crosshair(canvas, w, h, color=None, length=None, gap=None, dot=None,
+                       style=None, thickness=None, outline=None):
         color = color or CROSSHAIR_COLORS.get(cfg.get("crosshair_color", "Blue"), ACCENT_CYAN)
         cx, cy = w / 2.0, h / 2.0
         s = max(6, min(24, int(length if length is not None else cfg.get("crosshair_length", 15))))
         g = max(0, min(s - 2, int(gap if gap is not None else cfg.get("crosshair_gap", 6))))
         show_dot = cfg.get("crosshair_dot", True) if dot is None else dot
+        style = style or cfg.get("crosshair_style", "Four arms")
+        line_width = max(1, min(5, int(thickness if thickness is not None else cfg.get("crosshair_thickness", 2))))
+        show_outline = cfg.get("crosshair_outline", True) if outline is None else outline
         canvas.delete("xh")
-        canvas.create_line(cx - s, cy, cx - g, cy, fill=color, width=2, tags="xh")
-        canvas.create_line(cx + g, cy, cx + s, cy, fill=color, width=2, tags="xh")
-        canvas.create_line(cx, cy - s, cx, cy - g, fill=color, width=2, tags="xh")
-        canvas.create_line(cx, cy + g, cx, cy + s, fill=color, width=2, tags="xh")
+        if style == "Plus":
+            segments = [(-s, 0, s, 0), (0, -s, 0, s)]
+        elif style == "Dot":
+            segments = []
+            show_dot = True
+        else:
+            segments = [(-s, 0, -g, 0), (g, 0, s, 0),
+                        (0, -s, 0, -g), (0, g, 0, s)]
+        for x1, y1, x2, y2 in segments:
+            coords = (cx + x1, cy + y1, cx + x2, cy + y2)
+            if show_outline:
+                canvas.create_line(*coords, fill=BG, width=line_width + 2, tags="xh")
+            canvas.create_line(*coords, fill=color, width=line_width, tags="xh")
         if show_dot:
-            canvas.create_oval(cx - 1.5, cy - 1.5, cx + 1.5, cy + 1.5,
+            dot_radius = max(1.5, line_width / 2.0)
+            if show_outline:
+                canvas.create_oval(
+                    cx - dot_radius - 1, cy - dot_radius - 1,
+                    cx + dot_radius + 1, cy + dot_radius + 1,
+                    fill=BG, outline="", tags="xh",
+                )
+            canvas.create_oval(cx - dot_radius, cy - dot_radius,
+                               cx + dot_radius, cy + dot_radius,
                                fill=color, outline="", tags="xh")
 
     def draw_target_at(canvas, x, y, r, fill_outline=ACCENT_PINK):
@@ -1567,8 +1633,7 @@ def run_aimtrain_mode(start_mode=None):
                 on = math.hypot(pos[0] - cx, pos[1] - cy) <= r
             else:
                 canvas.delete("target")
-            draw_crosshair(canvas, canvas_w, canvas_h,
-                           ACCENT_GREEN if on else ACCENT_CYAN)
+            draw_crosshair(canvas, canvas_w, canvas_h)
             state["tot_frames"] += 1
             if on:
                 state["on_frames"] += 1
