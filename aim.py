@@ -80,6 +80,26 @@ def log(msg, level="INFO"):
         print(line, flush=True)
     except Exception:
         pass
+
+def set_console_visible(visible):
+    if os.name != "nt":
+        return False
+    try:
+        console_window = ctypes.windll.kernel32.GetConsoleWindow()
+        if not console_window:
+            return False
+        ctypes.windll.user32.ShowWindow(console_window, 5 if visible else 0)
+        log(f"Developer console {'shown' if visible else 'hidden'}")
+        return True
+    except Exception as e:
+        log(f"Could not change console visibility: {e}", "ERROR")
+        return False
+
+def configure_console_mode():
+    if getattr(sys, "frozen", False):
+        enabled = bool(load_cfg().get("developer_mode", False))
+        set_console_visible(enabled)
+        log(f"Developer mode: {'ON' if enabled else 'OFF'}")
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
@@ -110,6 +130,7 @@ def load_cfg():
         "crosshair_gap": 6,
         "crosshair_dot": True,
         "best_ranks": {},
+        "developer_mode": False,
     }
 
 def save_cfg(cfg):
@@ -624,6 +645,30 @@ def run_aimtrain_mode(start_mode=None):
         ).pack(side="left", padx=4)
         tk.Checkbutton(
             reticle_box, text="Center dot", variable=crosshair_dot_var,
+            font=("Consolas", 10), fg=FG, bg=BG2, selectcolor=DARKGREY,
+            activebackground=BG2, activeforeground=FG,
+        ).pack(anchor="w", padx=12, pady=(0, 4))
+
+        developer_mode_var = tk.BooleanVar(
+            value=bool(cfg.get("developer_mode", False))
+        )
+
+        def toggle_developer_mode():
+            enabled = developer_mode_var.get()
+            cfg["developer_mode"] = enabled
+            save_cfg(cfg)
+            visible = set_console_visible(enabled)
+            if enabled and getattr(sys, "frozen", False) and not visible:
+                hint.config(text="Could not show developer terminal", fg=ACCENT_RED)
+            else:
+                hint.config(
+                    text=f"Developer mode {'enabled' if enabled else 'disabled'}",
+                    fg=ACCENT_GREEN if enabled else GREY,
+                )
+
+        tk.Checkbutton(
+            reticle_box, text="Developer mode · show diagnostic terminal",
+            variable=developer_mode_var, command=toggle_developer_mode,
             font=("Consolas", 10), fg=FG, bg=BG2, selectcolor=DARKGREY,
             activebackground=BG2, activeforeground=FG,
         ).pack(anchor="w", padx=12, pady=(0, 4))
@@ -1648,11 +1693,10 @@ def run_update():
         return False
 
     try:
-        flags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
         subprocess.Popen(
             ["cmd", "/c", str(found)] if os.name == "nt" else [str(found)],
             cwd=str(found.parent),
-            creationflags=flags,
+            creationflags=0,
         )
         log(f"Update launched: {found.name}", "UPDATE")
         return True
@@ -1751,9 +1795,8 @@ def run_gui():
                 cmd = [exe, "--mode", mode]
             else:
                 cmd = [exe, str(Path(__file__).resolve()), "--mode", mode]
-            flags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
             log(f"Launching mode process: {mode}")
-            subprocess.Popen(cmd, creationflags=flags)
+            subprocess.Popen(cmd, creationflags=0)
             status.config(text=f"launched · {mode}", fg=ACCENT_CYAN)
         except Exception as e:
             log(f"Could not launch mode {mode}: {e}", "ERROR")
@@ -1790,6 +1833,7 @@ def run_gui():
 # ═══════════════════════════════════════════════════════════
 
 def main():
+    configure_console_mode()
     if "--mode" in sys.argv:
         idx = sys.argv.index("--mode")
         if idx + 1 < len(sys.argv):
