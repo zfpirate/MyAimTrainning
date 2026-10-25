@@ -31,7 +31,7 @@ VALO_SENS = 0.085
 VALO_YAW = 0.07
 VALO_FOV_H = 103.0  # Valorant default horizontal FOV
 
-MODE_AIMTRAIN = "aimtrain"
+MODE_AIMTRAIN = "aim"
 MODE_FOLLOW = "follow"
 MODE_PLAY = "play"
 MODE_SETTINGS = "settings"
@@ -47,6 +47,12 @@ ACCENT_GREEN = "#00ff88"
 ACCENT_PURPLE = "#aa66ff"
 GREY = "#666688"
 DARKGREY = "#222233"
+CROSSHAIR_COLORS = {
+    "Blue": ACCENT_CYAN,
+    "Red": ACCENT_RED,
+    "White": FG,
+    "Green": ACCENT_GREEN,
+}
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -89,6 +95,10 @@ def load_cfg():
         "total_launches": 0,
         "valo_dpi": VALO_DPI,
         "valo_sens": VALO_SENS,
+        "crosshair_color": "Blue",
+        "crosshair_length": 15,
+        "crosshair_gap": 6,
+        "crosshair_dot": True,
     }
 
 def save_cfg(cfg):
@@ -548,9 +558,7 @@ def run_aimtrain_mode(start_mode=None):
 
     def go_back():
         release_mouse()
-        clear_content()
-        clear_buttons()
-        show_home()
+        root.destroy()
 
     def for_destroy(fn):
         release_mouse()
@@ -639,6 +647,68 @@ def run_aimtrain_mode(start_mode=None):
                                       fg=FG, bg=BG2, anchor="w")
             live_labels[k].pack(side="left")
 
+        reticle_box = tk.Frame(content, bg=BG2, highlightthickness=1,
+                               highlightbackground=ACCENT_RED)
+        reticle_box.pack(pady=8, ipadx=18, ipady=8)
+        tk.Label(reticle_box, text="CROSSHAIR PREVIEW",
+                 font=("Consolas", 11, "bold"), fg=ACCENT_RED,
+                 bg=BG2).pack(anchor="w", padx=12, pady=(4, 0))
+
+        crosshair_color_var = tk.StringVar(value=cfg.get("crosshair_color", "Blue"))
+        crosshair_length_var = tk.IntVar(value=int(cfg.get("crosshair_length", 15)))
+        crosshair_gap_var = tk.IntVar(value=int(cfg.get("crosshair_gap", 6)))
+        crosshair_dot_var = tk.BooleanVar(value=bool(cfg.get("crosshair_dot", True)))
+        preview = tk.Canvas(
+            reticle_box, width=190, height=72, bg=BG,
+            highlightthickness=1, highlightbackground=DARKGREY,
+        )
+        preview.pack(pady=5)
+
+        reticle_row = tk.Frame(reticle_box, bg=BG2)
+        reticle_row.pack(fill="x", padx=10, pady=5)
+        tk.Label(reticle_row, text="Color", font=("Consolas", 10),
+                 fg=GREY, bg=BG2).pack(side="left", padx=(0, 8))
+        color_menu = tk.OptionMenu(
+            reticle_row, crosshair_color_var, *CROSSHAIR_COLORS.keys()
+        )
+        color_menu.config(bg=DARKGREY, fg=FG, activebackground=ACCENT_CYAN,
+                          activeforeground=BG, relief="flat", highlightthickness=0)
+        color_menu["menu"].config(bg=BG2, fg=FG, activebackground=ACCENT_CYAN)
+        color_menu.pack(side="left", padx=(0, 12))
+
+        def refresh_crosshair_preview(*_):
+            draw_crosshair(
+                preview, 190, 72,
+                color=CROSSHAIR_COLORS.get(crosshair_color_var.get(), ACCENT_CYAN),
+                length=crosshair_length_var.get(),
+                gap=crosshair_gap_var.get(),
+                dot=crosshair_dot_var.get(),
+            )
+
+        tk.Scale(
+            reticle_row, label="Length", variable=crosshair_length_var,
+            from_=6, to=24, orient="horizontal", length=140,
+            bg=BG2, fg=FG, troughcolor=DARKGREY,
+            activebackground=ACCENT_CYAN, highlightthickness=0,
+        ).pack(side="left", padx=4)
+        tk.Scale(
+            reticle_row, label="Gap", variable=crosshair_gap_var,
+            from_=0, to=12, orient="horizontal", length=140,
+            bg=BG2, fg=FG, troughcolor=DARKGREY,
+            activebackground=ACCENT_CYAN, highlightthickness=0,
+        ).pack(side="left", padx=4)
+        tk.Checkbutton(
+            reticle_box, text="Center dot", variable=crosshair_dot_var,
+            font=("Consolas", 10), fg=FG, bg=BG2, selectcolor=DARKGREY,
+            activebackground=BG2, activeforeground=FG,
+        ).pack(anchor="w", padx=12, pady=(0, 4))
+        for setting_var in (
+            crosshair_color_var, crosshair_length_var,
+            crosshair_gap_var, crosshair_dot_var,
+        ):
+            setting_var.trace_add("write", refresh_crosshair_preview)
+        refresh_crosshair_preview()
+
         hint = tk.Label(content, text="", font=("Consolas", 10), fg=GREY, bg=BG)
         hint.pack(pady=4)
 
@@ -677,6 +747,10 @@ def run_aimtrain_mode(start_mode=None):
             d, s = vals
             cfg["valo_dpi"] = d
             cfg["valo_sens"] = s
+            cfg["crosshair_color"] = crosshair_color_var.get()
+            cfg["crosshair_length"] = crosshair_length_var.get()
+            cfg["crosshair_gap"] = crosshair_gap_var.get()
+            cfg["crosshair_dot"] = crosshair_dot_var.get()
             save_cfg(cfg)
             refresh_header()
             hint.config(text=f"Saved · {d:.0f} DPI / {s}  — used in AIM TRAIN and FOLLOW",
@@ -978,16 +1052,20 @@ def run_aimtrain_mode(start_mode=None):
 
         return cam, apply_delta
 
-    def draw_crosshair(canvas, w, h, color=ACCENT_CYAN):
+    def draw_crosshair(canvas, w, h, color=None, length=None, gap=None, dot=None):
+        color = color or CROSSHAIR_COLORS.get(cfg.get("crosshair_color", "Blue"), ACCENT_CYAN)
         cx, cy = w / 2.0, h / 2.0
-        g, s = 6, 15
+        s = max(6, min(24, int(length if length is not None else cfg.get("crosshair_length", 15))))
+        g = max(0, min(s - 2, int(gap if gap is not None else cfg.get("crosshair_gap", 6))))
+        show_dot = cfg.get("crosshair_dot", True) if dot is None else dot
         canvas.delete("xh")
         canvas.create_line(cx - s, cy, cx - g, cy, fill=color, width=2, tags="xh")
         canvas.create_line(cx + g, cy, cx + s, cy, fill=color, width=2, tags="xh")
         canvas.create_line(cx, cy - s, cx, cy - g, fill=color, width=2, tags="xh")
         canvas.create_line(cx, cy + g, cx, cy + s, fill=color, width=2, tags="xh")
-        canvas.create_oval(cx - 1.5, cy - 1.5, cx + 1.5, cy + 1.5,
-                           fill=color, outline="", tags="xh")
+        if show_dot:
+            canvas.create_oval(cx - 1.5, cy - 1.5, cx + 1.5, cy + 1.5,
+                               fill=color, outline="", tags="xh")
 
     def draw_target_at(canvas, x, y, r, fill_outline=ACCENT_PINK):
         canvas.delete("target")

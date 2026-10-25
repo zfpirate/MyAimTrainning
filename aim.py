@@ -12,6 +12,7 @@ import time
 import math
 import random
 import ctypes
+import queue
 from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
@@ -428,13 +429,8 @@ def run_aimtrain_mode(start_mode=None):
             w.destroy()
 
     def go_back():
-        if start_mode == MODE_SETTINGS:
-            release_mouse()
-            root.destroy()
-            return
-        clear_content()
-        clear_buttons()
-        show_home()
+        release_mouse()
+        root.destroy()
 
     def for_destroy(fn):
         clear_content()
@@ -551,6 +547,21 @@ def run_aimtrain_mode(start_mode=None):
         crosshair_dot_var = tk.BooleanVar(
             value=bool(cfg.get("crosshair_dot", True))
         )
+        preview = tk.Canvas(
+            reticle_box, width=190, height=72, bg=BG,
+            highlightthickness=1, highlightbackground=DARKGREY,
+        )
+        preview.pack(pady=5)
+
+        def refresh_crosshair_preview(*_):
+            draw_crosshair(
+                preview, 190, 72,
+                color=CROSSHAIR_COLORS.get(crosshair_color_var.get(), ACCENT_CYAN),
+                length=crosshair_length_var.get(),
+                gap=crosshair_gap_var.get(),
+                dot=crosshair_dot_var.get(),
+            )
+
         tk.Scale(
             reticle_row, label="Length", variable=crosshair_length_var,
             from_=6, to=24, orient="horizontal", length=150,
@@ -570,6 +581,12 @@ def run_aimtrain_mode(start_mode=None):
             font=("Consolas", 10), fg=FG, bg=BG2, selectcolor=DARKGREY,
             activebackground=BG2, activeforeground=FG,
         ).pack(anchor="w", padx=12, pady=(0, 4))
+        for setting_var in (
+            crosshair_color_var, crosshair_length_var,
+            crosshair_gap_var, crosshair_dot_var,
+        ):
+            setting_var.trace_add("write", refresh_crosshair_preview)
+        refresh_crosshair_preview()
 
         hint = tk.Label(content, text="", font=("Consolas", 10), fg=GREY, bg=BG)
         hint.pack(pady=4)
@@ -914,16 +931,20 @@ def run_aimtrain_mode(start_mode=None):
 
         return cam, apply_delta
 
-    def draw_crosshair(canvas, w, h, color=ACCENT_CYAN):
+    def draw_crosshair(canvas, w, h, color=None, length=None, gap=None, dot=None):
+        color = color or CROSSHAIR_COLORS.get(cfg.get("crosshair_color", "Blue"), ACCENT_CYAN)
         cx, cy = w / 2.0, h / 2.0
-        g, s = 6, 15
+        s = max(6, min(24, int(length if length is not None else cfg.get("crosshair_length", 15))))
+        g = max(0, min(s - 2, int(gap if gap is not None else cfg.get("crosshair_gap", 6))))
+        show_dot = cfg.get("crosshair_dot", True) if dot is None else dot
         canvas.delete("xh")
         canvas.create_line(cx - s, cy, cx - g, cy, fill=color, width=2, tags="xh")
         canvas.create_line(cx + g, cy, cx + s, cy, fill=color, width=2, tags="xh")
         canvas.create_line(cx, cy - s, cx, cy - g, fill=color, width=2, tags="xh")
         canvas.create_line(cx, cy + g, cx, cy + s, fill=color, width=2, tags="xh")
-        canvas.create_oval(cx - 1.5, cy - 1.5, cx + 1.5, cy + 1.5,
-                           fill=color, outline="", tags="xh")
+        if show_dot:
+            canvas.create_oval(cx - 1.5, cy - 1.5, cx + 1.5, cy + 1.5,
+                               fill=color, outline="", tags="xh")
 
     def draw_target_at(canvas, x, y, r, fill_outline=ACCENT_PINK):
         canvas.delete("target")
@@ -935,10 +956,26 @@ def run_aimtrain_mode(start_mode=None):
                            outline=fill_outline, fill=fill_outline, tags="target")
 
     def attach_raw(on_delta, on_click):
-        def queue_click():
-            root.after_idle(on_click)
+        pending_clicks = queue.SimpleQueue()
+        raw = RawMouse(
+            root.winfo_id(), on_delta,
+            (lambda: pending_clicks.put(None)) if on_click else None,
+        )
 
-        raw = RawMouse(root.winfo_id(), on_delta, queue_click if on_click else None)
+        def poll_clicks():
+            if not raw._active:
+                return
+            while True:
+                try:
+                    pending_clicks.get_nowait()
+                except queue.Empty:
+                    break
+                on_click()
+            if raw._active:
+                root.after(8, poll_clicks)
+
+        if on_click:
+            root.after(8, poll_clicks)
         return raw, raw.start()
 
     def make_play_canvas(parent, accent_color):
