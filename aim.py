@@ -16,6 +16,7 @@ from ctypes import wintypes
 from datetime import datetime
 from pathlib import Path
 import subprocess
+import traceback
 
 # ═══════════════════════════════════════════════════════════
 #  GLOBALS
@@ -64,9 +65,14 @@ else:
 
 def log(msg, level="INFO"):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] [{level}] {msg}"
+    try:
+        print(line, flush=True)
+    except Exception:
+        pass
     try:
         with open(LOG_FILE, "a", encoding="utf-8") as f:
-            f.write(f"[{ts}] [{level}] {msg}\n")
+            f.write(line + "\n")
     except Exception:
         pass
 
@@ -74,7 +80,8 @@ def load_cfg():
     if CONFIG_FILE.exists():
         try:
             return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as e:
+            log(f"Could not read config {CONFIG_FILE}: {e}", "ERROR")
             pass
     return {
         "hwid": "".join(random.choices("0123456789ABCDEF", k=16)),
@@ -97,8 +104,8 @@ def load_cfg():
 def save_cfg(cfg):
     try:
         CONFIG_FILE.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as e:
+        log(f"Could not save config {CONFIG_FILE}: {e}", "ERROR")
 
 def get_valo_settings(cfg=None):
     cfg = cfg or {}
@@ -275,6 +282,7 @@ class RawMouse:
             self.on_delta(dx, dy)
         flags = raw.mouse.u.buttons.usButtonFlags
         if self.on_click and (flags & RI_MOUSE_LEFT_BUTTON_DOWN):
+            log("Raw mouse left-click received")
             self.on_click()
 
 # ═══════════════════════════════════════════════════════════
@@ -286,6 +294,14 @@ def run_aimtrain_mode(start_mode=None):
 
     cfg = load_cfg()
     root = tk.Tk()
+    def report_callback_exception(exc_type, exc_value, exc_traceback):
+        log(f"Tk callback exception: {exc_type.__name__}: {exc_value}", "ERROR")
+        for line in traceback.format_exception(exc_type, exc_value, exc_traceback):
+            for detail in line.rstrip().splitlines():
+                log(detail, "ERROR")
+
+    root.report_callback_exception = report_callback_exception
+    log(f"Game window opened; start_mode={start_mode or 'menu'}")
     root.title(f"AIM TRAINER v{VERSION}")
     root.configure(bg=BG)
 
@@ -941,6 +957,7 @@ def run_aimtrain_mode(start_mode=None):
     #  AIM TRAIN — Valorant-matched flicks
     # ═══════════════════════════════════════════════════
     def aimtrain_screen(precision=False):
+        log(f"Opening {'PRECISION' if precision else 'AIM TRAIN'} screen")
         clear_buttons()
         canvas, canvas_w, canvas_h = make_play_canvas(content, ACCENT_CYAN)
         cx, cy = canvas_w / 2.0, canvas_h / 2.0
@@ -1045,6 +1062,7 @@ def run_aimtrain_mode(start_mode=None):
             state["t_yaw"] = cam["yaw"] + dyaw
             state["t_pitch"] = max(-70.0, min(70.0, cam["pitch"] + dpitch))
             state["current_start"] = time.perf_counter()
+            log(f"Target {state['spawned']}/{TOTAL_TARGETS} spawned at yaw={state['t_yaw']:.2f}, pitch={state['t_pitch']:.2f}")
             if state["started_at"] is None:
                 state["started_at"] = time.perf_counter()
             update_hud()
@@ -1059,6 +1077,7 @@ def run_aimtrain_mode(start_mode=None):
         def shoot():
             if (not state["running"] or state["current_start"] is None
                     or state["shot_pending"]):
+                log(f"Shot ignored: running={state['running']}, target_ready={state['current_start'] is not None}, shot_pending={state['shot_pending']}", "DEBUG")
                 return
             now = time.perf_counter()
             if now - state["last_shot_at"] < 0.05:
@@ -1069,10 +1088,12 @@ def run_aimtrain_mode(start_mode=None):
                                  canvas_w, canvas_h)
             r = ang_to_px(TARGET_ANG, canvas_w)
             hit = False
+            hit_radius = r
             if pos is not None:
-                hit_radius = r
                 hit = math.hypot(pos[0] - cx, pos[1] - cy) <= hit_radius
             react = time.perf_counter() - state["current_start"]
+            offset = (round(pos[0] - cx, 1), round(pos[1] - cy, 1)) if pos else None
+            log(f"Shot result: {'HIT' if hit else 'MISS'}, target_offset={offset}, hit_radius={hit_radius:.1f}px, reaction={react * 1000:.1f}ms")
             if hit:
                 state["shot_pending"] = True
                 state["hits"] += 1
@@ -1104,6 +1125,7 @@ def run_aimtrain_mode(start_mode=None):
 
         def finish_game():
             state["running"] = False
+            log(f"Game finished: precision={precision}, hits={state['hits']}, misses={state['misses']}, score={state['score']}")
             release_mouse()
             if state["raw"]:
                 state["raw"].stop()
@@ -1188,6 +1210,7 @@ def run_aimtrain_mode(start_mode=None):
         def start_mouse_input():
             raw, ok = attach_raw(on_delta, shoot)
             state["raw"] = raw if ok else None
+            log(f"Raw mouse input {'started' if ok else 'unavailable'} for {'PRECISION' if precision else 'AIM TRAIN'}")
             if not ok:
                 hint.config(text="Raw mouse unavailable — using cursor move (not 1:1 Valorant)",
                             fg=ACCENT_ORANGE)
@@ -1215,6 +1238,7 @@ def run_aimtrain_mode(start_mode=None):
         def start_game():
             if state["running"]:
                 return
+            log(f"Start pressed: {'PRECISION' if precision else 'AIM TRAIN'}")
             state["running"] = True
             start_btn.destroy()
             start_mouse_input()
@@ -1248,6 +1272,7 @@ def run_aimtrain_mode(start_mode=None):
     #  FOLLOW — simple tracking
     # ═══════════════════════════════════════════════════
     def follow_screen():
+        log("Opening FOLLOW screen")
         clear_buttons()
         canvas, canvas_w, canvas_h = make_play_canvas(content, ACCENT_PINK)
         cx, cy = canvas_w / 2.0, canvas_h / 2.0
@@ -1298,6 +1323,7 @@ def run_aimtrain_mode(start_mode=None):
             if not state["running"]:
                 return
             state["running"] = False
+            log(f"FOLLOW finished: on_target={state['on_frames']}/{state['tot_frames']}, max_streak={state['max_streak']}")
             release_mouse()
             if state["raw"]:
                 state["raw"].stop()
@@ -1406,6 +1432,7 @@ def run_aimtrain_mode(start_mode=None):
         def start_mouse_input():
             raw, ok = attach_raw(on_delta, None)
             state["raw"] = raw if ok else None
+            log(f"Raw mouse input {'started' if ok else 'unavailable'} for FOLLOW")
             if not ok:
                 hint.config(text="Raw mouse unavailable — using cursor move (not 1:1 Valorant)",
                             fg=ACCENT_ORANGE)
@@ -1431,6 +1458,7 @@ def run_aimtrain_mode(start_mode=None):
         def start_follow():
             if state["running"]:
                 return
+            log("Start pressed: FOLLOW")
             state["running"] = True
             start_btn.destroy()
             start_mouse_input()
@@ -1471,6 +1499,7 @@ def run_aimtrain_mode(start_mode=None):
 # ═══════════════════════════════════════════════════════════
 
 def run_mode(mode):
+    log(f"Mode requested: {mode}")
     if mode == MODE_PLAY:
         run_aimtrain_mode()
     elif mode == MODE_SETTINGS:
@@ -1485,6 +1514,7 @@ def run_mode(mode):
 # ═══════════════════════════════════════════════════════════
 
 def run_update():
+    log("Update requested")
     candidates = ["update.bat", "build.bat", "update.cmd", "build.cmd"]
     paths = [BASE_DIR / name for name in candidates]
     paths.extend(BASE_DIR / "dist" / name for name in candidates)
@@ -1513,6 +1543,7 @@ def run_update():
         log(f"Update launched: {found.name}", "UPDATE")
         return True
     except Exception as e:
+        log(f"Could not start updater: {e}", "ERROR")
         try:
             import tkinter as tk
             from tkinter import messagebox
@@ -1529,6 +1560,7 @@ def run_update():
 
 def run_gui():
     import tkinter as tk
+    log(f"Launcher opened; executable={sys.executable}; frozen={getattr(sys, 'frozen', False)}")
 
     class RoundBtn(tk.Canvas):
         def __init__(self, parent, text, command, radius=90,
@@ -1606,9 +1638,11 @@ def run_gui():
             else:
                 cmd = [exe, str(Path(__file__).resolve()), "--mode", mode]
             flags = subprocess.CREATE_NEW_CONSOLE if os.name == "nt" else 0
+            log(f"Launching mode process: {mode}")
             subprocess.Popen(cmd, creationflags=flags)
             status.config(text=f"launched · {mode}", fg=ACCENT_CYAN)
         except Exception as e:
+            log(f"Could not launch mode {mode}: {e}", "ERROR")
             status.config(text=f"error: {e}", fg=ACCENT_RED)
 
     row = tk.Frame(root, bg=BG)
