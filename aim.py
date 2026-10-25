@@ -422,16 +422,16 @@ def run_aimtrain_mode(start_mode=None):
     # HOME
     def show_home():
         clear_buttons()
-        RoundBtn(btn_row, "REACTION", lambda: for_destroy(reaction_screen),
-                 radius=58, fg_color=ACCENT_ORANGE).pack(side="left", padx=10)
+        RoundBtn(btn_row, "REACTION TIME", lambda: for_destroy(reaction_screen),
+                 radius=58, fg_color=ACCENT_ORANGE).pack(side="top", pady=4)
         RoundBtn(btn_row, "AIM\nTRAIN", lambda: for_destroy(aimtrain_screen),
-                 radius=58, fg_color=ACCENT_CYAN).pack(side="left", padx=10)
+                 radius=58, fg_color=ACCENT_CYAN).pack(side="top", pady=4)
         RoundBtn(btn_row, "PRECISION", lambda: for_destroy(lambda: aimtrain_screen(True)),
-             radius=58, fg_color=ACCENT_RED).pack(side="left", padx=10)
+             radius=58, fg_color=ACCENT_RED).pack(side="top", pady=4)
         RoundBtn(btn_row, "FOLLOW", lambda: for_destroy(follow_screen),
-                 radius=58, fg_color=ACCENT_PINK).pack(side="left", padx=10)
+                 radius=58, fg_color=ACCENT_PINK).pack(side="top", pady=4)
         RoundBtn(btn_row, "STATS", lambda: for_destroy(stats_screen),
-                 radius=58, fg_color=ACCENT_PURPLE).pack(side="left", padx=10)
+                 radius=58, fg_color=ACCENT_PURPLE).pack(side="top", pady=4)
 
         # Show total points + best score
         total = cfg.get("total_points", 0)
@@ -1597,11 +1597,11 @@ def run_gui():
     row = tk.Frame(root, bg=BG)
     row.pack(pady=10)
     RoundBtn(row, "PLAY", lambda: launch(MODE_PLAY),
-             radius=74, fg_color=ACCENT_CYAN).pack(side="left", padx=10)
+             radius=74, fg_color=ACCENT_CYAN).pack(pady=5)
     RoundBtn(row, "SETTINGS", lambda: launch(MODE_SETTINGS),
-             radius=74, fg_color=ACCENT_RED).pack(side="left", padx=10)
+             radius=74, fg_color=ACCENT_RED).pack(pady=5)
     RoundBtn(row, "UPDATE", on_update_click,
-             radius=74, fg_color=ACCENT_PINK).pack(side="left", padx=10)
+             radius=74, fg_color=ACCENT_PINK).pack(pady=5)
 
     # Total points displayed on launcher
     cfg = load_cfg()

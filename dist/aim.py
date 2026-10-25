@@ -32,6 +32,8 @@ VALO_FOV_H = 103.0  # Valorant default horizontal FOV
 
 MODE_AIMTRAIN = "aimtrain"
 MODE_FOLLOW = "follow"
+MODE_PLAY = "play"
+MODE_SETTINGS = "settings"
 
 BG = "#0a0a14"
 BG2 = "#0f0f1a"
@@ -537,18 +539,18 @@ def run_aimtrain_mode(start_mode=None):
     # HOME
     def show_home():
         clear_buttons()
-        RoundBtn(btn_row, "REACTION", lambda: for_destroy(reaction_screen),
-                 radius=58, fg_color=ACCENT_ORANGE).pack(side="left", padx=10)
+        RoundBtn(btn_row, "REACTION TIME", lambda: for_destroy(reaction_screen),
+                 radius=58, fg_color=ACCENT_ORANGE).pack(side="top", pady=4)
         RoundBtn(btn_row, "AIM\nTRAIN", lambda: for_destroy(aimtrain_screen),
-                 radius=58, fg_color=ACCENT_CYAN).pack(side="left", padx=10)
+                 radius=58, fg_color=ACCENT_CYAN).pack(side="top", pady=4)
         RoundBtn(btn_row, "PRECISION", lambda: for_destroy(lambda: aimtrain_screen(True)),
-             radius=58, fg_color=ACCENT_RED).pack(side="left", padx=10)
+             radius=58, fg_color=ACCENT_RED).pack(side="top", pady=4)
         RoundBtn(btn_row, "FOLLOW", lambda: for_destroy(follow_screen),
-                 radius=58, fg_color=ACCENT_PINK).pack(side="left", padx=10)
+                 radius=58, fg_color=ACCENT_PINK).pack(side="top", pady=4)
         RoundBtn(btn_row, "SENS", lambda: for_destroy(sens_screen),
-                 radius=58, fg_color=ACCENT_GREEN).pack(side="left", padx=10)
+                 radius=58, fg_color=ACCENT_GREEN).pack(side="top", pady=4)
         RoundBtn(btn_row, "STATS", lambda: for_destroy(stats_screen),
-                 radius=58, fg_color=ACCENT_PURPLE).pack(side="left", padx=10)
+                 radius=58, fg_color=ACCENT_PURPLE).pack(side="top", pady=4)
 
         # Show total points + best score
         total = cfg.get("total_points", 0)
@@ -1466,6 +1468,8 @@ def run_aimtrain_mode(start_mode=None):
 
     if start_mode == MODE_FOLLOW:
         root.after_idle(follow_screen)
+    elif start_mode == MODE_SETTINGS:
+        root.after_idle(sens_screen)
     else:
         show_home()
     root.mainloop()
@@ -1475,7 +1479,11 @@ def run_aimtrain_mode(start_mode=None):
 # ═══════════════════════════════════════════════════════════
 
 def run_mode(mode):
-    if mode == MODE_AIMTRAIN:
+    if mode == MODE_PLAY:
+        run_aimtrain_mode()
+    elif mode == MODE_SETTINGS:
+        run_aimtrain_mode(start_mode=MODE_SETTINGS)
+    elif mode == MODE_AIMTRAIN:
         run_aimtrain_mode()
     elif mode == MODE_FOLLOW:
         run_aimtrain_mode(start_mode=MODE_FOLLOW)
@@ -1562,7 +1570,7 @@ def run_gui():
             self.itemconfig(self.inner, fill="")
 
     root = tk.Tk()
-    root.title(f"AIM SUITE v{VERSION}")
+    root.title(f"AIM.exe v{VERSION}")
     root.configure(bg=BG)
     root.resizable(False, False)
 
@@ -1571,7 +1579,7 @@ def run_gui():
     x, y = (sw - w) // 2, (sh - h) // 2
     root.geometry(f"{w}x{h}+{x}+{y}")
 
-    tk.Label(root, text="▚▚  AIM  SUITE  ▞▞",
+    tk.Label(root, text="▚▚  AIM.exe ▞▞",
              font=("Consolas", 24, "bold"),
              fg=ACCENT_PINK, bg=BG).pack(pady=(30, 5))
     tk.Label(root, text=f"v{VERSION} · valorant sens · reaction · follow",
@@ -1595,12 +1603,22 @@ def run_gui():
         except Exception as e:
             status.config(text=f"error: {e}", fg=ACCENT_RED)
 
+    def on_update_click():
+        status.config(text="running update...", fg=ACCENT_ORANGE)
+        if run_update():
+            status.config(text="update launched", fg=ACCENT_CYAN)
+            root.after(1000, root.destroy)
+        else:
+            status.config(text="update could not be started", fg=ACCENT_RED)
+
     row = tk.Frame(root, bg=BG)
     row.pack(pady=10)
-    RoundBtn(row, "AIM\nTRAIN", lambda: launch(MODE_AIMTRAIN),
-             radius=90, fg_color=ACCENT_CYAN).pack(side="left", padx=30)
-    RoundBtn(row, "FOLLOW", lambda: launch(MODE_FOLLOW),
-             radius=90, fg_color=ACCENT_PINK).pack(side="left", padx=30)
+    RoundBtn(row, "PLAY", lambda: launch(MODE_PLAY),
+             radius=74, fg_color=ACCENT_CYAN).pack(pady=5)
+    RoundBtn(row, "SETTINGS", lambda: launch(MODE_SETTINGS),
+             radius=74, fg_color=ACCENT_RED).pack(pady=5)
+    RoundBtn(row, "UPDATE", on_update_click,
+             radius=74, fg_color=ACCENT_PINK).pack(pady=5)
 
     # Total points displayed on launcher
     cfg = load_cfg()
@@ -1610,27 +1628,6 @@ def run_gui():
     tk.Label(pts_row, text=f"★ {total:,} points total",
              font=("Consolas", 12, "bold"),
              fg=ACCENT_ORANGE, bg=BG).pack()
-
-    tk.Frame(root, bg=BG, height=20).pack()
-
-    upd_row = tk.Frame(root, bg=BG)
-    upd_row.pack(pady=15)
-
-    def on_update_click():
-        status.config(text="running update...", fg=ACCENT_ORANGE)
-        if run_update():
-            status.config(text="update launched", fg=ACCENT_CYAN)
-            root.after(1000, root.destroy)
-        else:
-            status.config(text="update could not be started", fg=ACCENT_RED)
-
-    tk.Button(upd_row, text="⟳  UPDATE",
-              command=on_update_click,
-              font=("Consolas", 12, "bold"),
-              fg=ACCENT_ORANGE, bg=BG2,
-              activebackground=DARKGREY, activeforeground=ACCENT_ORANGE,
-              relief="flat", bd=0, padx=30, pady=10,
-              cursor="hand2").pack()
 
     status.pack(side="bottom", pady=15)
 
