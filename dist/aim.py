@@ -608,7 +608,9 @@ def run_aimtrain_mode(start_mode=None):
 
     def go_back():
         release_mouse()
-        root.destroy()
+        clear_content()
+        clear_buttons()
+        show_home()
 
     def for_destroy(fn):
         release_mouse()
