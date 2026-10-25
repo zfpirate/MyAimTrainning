@@ -27,6 +27,14 @@ jobs:
       - name: Build executable
         run: python -m PyInstaller --clean --noconfirm --onefile --name AIM aim.py
 
+      - name: Package Windows release
+        shell: pwsh
+        run: |
+          $packageDir = "dist/AIM-Windows"
+          New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+          Copy-Item -Path dist/AIM.exe, update.bat, aim.py, aim.spec -Destination $packageDir
+          Compress-Archive -Path "$packageDir/*" -DestinationPath "dist/AIM-Windows-v0.1.${{ github.run_number }}.zip" -Force
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -37,3 +45,4 @@ jobs:
           files: |
             dist/AIM.exe
             update.bat
+            dist/AIM-Windows-v0.1.${{ github.run_number }}.zip
