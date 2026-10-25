@@ -838,6 +838,7 @@ def run_aimtrain_mode(start_mode=None):
         cam, apply_delta = make_camera()
         state = {
             "hits": 0, "misses": 0, "spawned": 0,
+            "shot_pending": False,
             "started_at": None, "current_start": None,
             "t_yaw": 0.0, "t_pitch": 0.0,
             "reaction_times": [], "running": True,
@@ -922,6 +923,7 @@ def run_aimtrain_mode(start_mode=None):
                 finish_game()
                 return
             state["spawned"] += 1
+            state["shot_pending"] = False
             for _ in range(20):
                 dyaw = random.uniform(-22.0, 22.0)
                 dpitch = random.uniform(-10.0, 10.0)
@@ -942,7 +944,8 @@ def run_aimtrain_mode(start_mode=None):
             root.after(100, tick_timer)
 
         def shoot():
-            if not state["running"] or state["current_start"] is None:
+            if (not state["running"] or state["current_start"] is None
+                    or state["shot_pending"]):
                 return
             pos = project_target(cam["yaw"], cam["pitch"],
                                  state["t_yaw"], state["t_pitch"],
@@ -954,6 +957,7 @@ def run_aimtrain_mode(start_mode=None):
                 hit = math.hypot(pos[0] - cx, pos[1] - cy) <= hit_radius
             react = time.perf_counter() - state["current_start"]
             if hit:
+                state["shot_pending"] = True
                 state["hits"] += 1
                 state["combo"] += 1
                 state["max_combo"] = max(state["max_combo"], state["combo"])
@@ -1079,7 +1083,7 @@ def run_aimtrain_mode(start_mode=None):
 
             canvas.bind("<Motion>", motion)
             canvas.config(cursor="crosshair")
-        canvas.bind("<Button-1>", lambda e: shoot())
+            canvas.bind("<Button-1>", lambda e: shoot())
 
         def stop_raw(_e=None):
             if state["raw"]:
