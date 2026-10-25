@@ -34,4 +34,6 @@ jobs:
           name: AIM v0.1.${{ github.run_number }}
           generate_release_notes: true
           overwrite_files: true
-          files: dist/AIM.exe
+          files: |
+            dist/AIM.exe
+            update.bat
