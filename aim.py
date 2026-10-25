@@ -399,6 +399,7 @@ def run_aimtrain_mode(start_mode=None):
     content.pack(fill="both", expand=True, padx=20, pady=10)
 
     def clear_content():
+        root.unbind("<Button-1>")
         for w in content.winfo_children():
             w.destroy()
 
@@ -1062,7 +1063,7 @@ def run_aimtrain_mode(start_mode=None):
             r = ang_to_px(TARGET_ANG, canvas_w)
             hit = False
             if pos is not None:
-                hit_radius = max(3.0, r * 0.2) if precision else r
+                hit_radius = r
                 hit = math.hypot(pos[0] - cx, pos[1] - cy) <= hit_radius
             react = time.perf_counter() - state["current_start"]
             if hit:

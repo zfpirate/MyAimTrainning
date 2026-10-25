@@ -518,6 +518,7 @@ def run_aimtrain_mode(start_mode=None):
     content.pack(fill="both", expand=True, padx=20, pady=10)
 
     def clear_content():
+        root.unbind("<Button-1>")
         for w in content.winfo_children():
             w.destroy()
 
@@ -1026,7 +1027,7 @@ def run_aimtrain_mode(start_mode=None):
             "shot_pending": False,
             "started_at": None, "current_start": None,
             "t_yaw": 0.0, "t_pitch": 0.0,
-            "reaction_times": [], "running": True,
+            "reaction_times": [], "running": False,
             "score": 0, "combo": 0, "max_combo": 0,
             "raw": None,
         }
@@ -1138,7 +1139,7 @@ def run_aimtrain_mode(start_mode=None):
             r = ang_to_px(TARGET_ANG, canvas_w)
             hit = False
             if pos is not None:
-                hit_radius = max(3.0, r * 0.2) if precision else r
+                hit_radius = r
                 hit = math.hypot(pos[0] - cx, pos[1] - cy) <= hit_radius
             react = time.perf_counter() - state["current_start"]
             if hit:
@@ -1276,11 +1277,34 @@ def run_aimtrain_mode(start_mode=None):
                 state["raw"] = None
         content.bind("<Destroy>", lambda e: stop_raw() if e.widget is content else None)
 
+        def start_game():
+            if state["running"]:
+                return
+            state["running"] = True
+            start_btn.destroy()
+            root.after_idle(spawn_target)
+            tick_timer()
+            root.after(8, redraw)
+
+        start_btn = tk.Button(
+            content, text="START PRECISION" if precision else "START AIM TRAIN",
+            command=start_game, font=("Consolas", 12, "bold"),
+            fg=ACCENT_CYAN, bg=BG2, activebackground=DARKGREY,
+            activeforeground=ACCENT_CYAN, relief="flat", bd=0,
+            padx=28, pady=10, cursor="hand2",
+        )
+        start_btn.pack(pady=8, before=canvas.master)
+
+        def start_from_key(_event=None):
+            start_game()
+            return "break"
+
+        start_btn.bind("<Return>", start_from_key)
+        start_btn.bind("<KP_Enter>", start_from_key)
+        start_btn.focus_set()
+
         update_hud()
-        tick_timer()
         draw_crosshair(canvas, canvas_w, canvas_h)
-        root.after_idle(spawn_target)
-        root.after(8, redraw)
 
     # ═══════════════════════════════════════════════════
     #  FOLLOW — simple tracking
@@ -1294,7 +1318,7 @@ def run_aimtrain_mode(start_mode=None):
 
         cam, apply_delta = make_camera()
         state = {
-            "running": True, "started_at": None,
+            "running": False, "started_at": None,
             "on_frames": 0, "tot_frames": 0,
             "score": 0, "streak": 0, "max_streak": 0,
             "raw": None, "t_yaw": 0.0, "t_pitch": 0.0,
@@ -1463,8 +1487,30 @@ def run_aimtrain_mode(start_mode=None):
                 state["raw"] = None
         content.bind("<Destroy>", lambda e: stop_raw() if e.widget is content else None)
 
+        def start_follow():
+            if state["running"]:
+                return
+            state["running"] = True
+            start_btn.destroy()
+            root.after_idle(loop)
+
+        start_btn = tk.Button(
+            content, text="START FOLLOW", command=start_follow,
+            font=("Consolas", 12, "bold"), fg=ACCENT_PINK, bg=BG2,
+            activebackground=DARKGREY, activeforeground=ACCENT_PINK,
+            relief="flat", bd=0, padx=28, pady=10, cursor="hand2",
+        )
+        start_btn.pack(pady=8)
+
+        def start_from_key(_event=None):
+            start_follow()
+            return "break"
+
+        start_btn.bind("<Return>", start_from_key)
+        start_btn.bind("<KP_Enter>", start_from_key)
+        start_btn.focus_set()
+
         draw_crosshair(canvas, canvas_w, canvas_h)
-        root.after_idle(loop)
 
     if start_mode == MODE_FOLLOW:
         root.after_idle(follow_screen)
