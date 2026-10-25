@@ -33,17 +33,17 @@ VALO_FOV_H = 103.0  # Valorant default horizontal FOV
 MODE_AIMTRAIN = "aimtrain"
 MODE_FOLLOW = "follow"
 
-BG = "#0a0a14"
-BG2 = "#0f0f1a"
-FG = "#e0e0f0"
-ACCENT_PINK = "#ff00aa"
-ACCENT_CYAN = "#00ffcc"
-ACCENT_RED = "#ff0055"
-ACCENT_ORANGE = "#ffaa00"
-ACCENT_GREEN = "#00ff88"
-ACCENT_PURPLE = "#aa66ff"
-GREY = "#666688"
-DARKGREY = "#222233"
+BG = "#081526"
+BG2 = "#10243a"
+FG = "#edf5ff"
+ACCENT_PINK = "#f0445e"
+ACCENT_CYAN = "#35a7ff"
+ACCENT_RED = "#d9364f"
+ACCENT_ORANGE = "#ff7460"
+ACCENT_GREEN = "#59d7b8"
+ACCENT_PURPLE = "#83a8ff"
+GREY = "#91a6bd"
+DARKGREY = "#19334e"
 
 if getattr(sys, "frozen", False):
     BASE_DIR = Path(sys.executable).parent
@@ -350,20 +350,24 @@ def run_aimtrain_mode(start_mode=None):
     class RoundBtn(tk.Canvas):
         def __init__(self, parent, text, command, radius=70,
                      fg_color=ACCENT_CYAN, hover_color=ACCENT_PINK):
-            size = radius * 2 + 10
-            super().__init__(parent, width=size, height=size,
+            width = max(132, int(radius * 2.05))
+            height = 72
+            super().__init__(parent, width=width, height=height,
                              bg=BG, highlightthickness=0)
             self.command = command
             self.color = fg_color
             self.hover_color = hover_color
-            cx = cy = size // 2
-            r = radius
-            self.circle = self.create_oval(cx-r, cy-r, cx+r, cy+r,
-                                           outline=fg_color, width=3, fill=BG2)
-            self.inner = self.create_oval(cx-r+8, cy-r+8, cx+r-8, cy+r-8,
-                                           outline="", fill="")
-            self.label = self.create_text(cx, cy, text=text, fill=fg_color,
-                                           font=("Consolas", 11, "bold"))
+            self.circle = self.create_rectangle(
+                2, 2, width - 2, height - 2,
+                outline=fg_color, width=2, fill=BG2,
+            )
+            self.inner = self.create_rectangle(
+                7, 7, width - 7, height - 7, outline="", fill="",
+            )
+            self.label = self.create_text(
+                width // 2, height // 2, text=text, fill=fg_color,
+                font=("Segoe UI", 10, "bold"), justify="center",
+            )
             self.tag_bind("all", "<Enter>", self._enter)
             self.tag_bind("all", "<Leave>", self._leave)
             self.tag_bind("all", "<Button-1>", lambda e: self.command())
@@ -443,7 +447,7 @@ def run_aimtrain_mode(start_mode=None):
                      fg=ACCENT_PINK, bg=BG2).pack(pady=3)
 
         tk.Label(content, text="Mouse = Valorant yaw · left click = shoot · ESC to quit",
-                 font=("Consolas", 10), fg=GREY, bg=BG).pack(side="bottom", pady=10)
+             font=("Segoe UI", 10), fg=GREY, bg=BG).pack(side="bottom", pady=10)
 
     # SENS
     def sens_screen():
@@ -681,7 +685,7 @@ def run_aimtrain_mode(start_mode=None):
                 return
             state["phase"] = "go"
             state["start"] = time.perf_counter()
-            set_stage(ACCENT_GREEN, "GO", "click now", title_fg="#001108")
+            set_stage(ACCENT_GREEN, "GO", "click now", title_fg=BG)
 
         def on_click(_event=None):
             phase = state["phase"]
@@ -1144,7 +1148,7 @@ def run_aimtrain_mode(start_mode=None):
             activeforeground=ACCENT_CYAN, relief="flat", bd=0,
             padx=28, pady=10, cursor="hand2",
         )
-        start_btn.pack(pady=8)
+        start_btn.pack(pady=8, before=canvas.master)
 
         update_hud()
         draw_crosshair(canvas, canvas_w, canvas_h)
@@ -1353,6 +1357,8 @@ def run_aimtrain_mode(start_mode=None):
 
     if start_mode == MODE_FOLLOW:
         root.after_idle(follow_screen)
+    elif start_mode == MODE_AIMTRAIN:
+        root.after_idle(aimtrain_screen)
     else:
         show_home()
     root.mainloop()
@@ -1363,7 +1369,7 @@ def run_aimtrain_mode(start_mode=None):
 
 def run_mode(mode):
     if mode == MODE_AIMTRAIN:
-        run_aimtrain_mode()
+        run_aimtrain_mode(start_mode=MODE_AIMTRAIN)
     elif mode == MODE_FOLLOW:
         run_aimtrain_mode(start_mode=MODE_FOLLOW)
 
@@ -1420,20 +1426,24 @@ def run_gui():
     class RoundBtn(tk.Canvas):
         def __init__(self, parent, text, command, radius=90,
                      fg_color=ACCENT_CYAN, hover_color=ACCENT_PINK):
-            size = radius * 2 + 10
-            super().__init__(parent, width=size, height=size,
+            width = max(152, int(radius * 2.05))
+            height = 76
+            super().__init__(parent, width=width, height=height,
                              bg=BG, highlightthickness=0)
             self.command = command
             self.color = fg_color
             self.hover_color = hover_color
-            cx = cy = size // 2
-            r = radius
-            self.circle = self.create_oval(cx-r, cy-r, cx+r, cy+r,
-                                           outline=fg_color, width=3, fill=BG2)
-            self.inner = self.create_oval(cx-r+10, cy-r+10, cx+r-10, cy+r-10,
-                                           outline="", fill="")
-            self.label = self.create_text(cx, cy, text=text, fill=fg_color,
-                                           font=("Consolas", 13, "bold"))
+            self.circle = self.create_rectangle(
+                2, 2, width - 2, height - 2,
+                outline=fg_color, width=2, fill=BG2,
+            )
+            self.inner = self.create_rectangle(
+                7, 7, width - 7, height - 7, outline="", fill="",
+            )
+            self.label = self.create_text(
+                width // 2, height // 2, text=text, fill=fg_color,
+                font=("Segoe UI", 11, "bold"), justify="center",
+            )
             self.tag_bind("all", "<Enter>", self._enter)
             self.tag_bind("all", "<Leave>", self._leave)
             self.tag_bind("all", "<Button-1>", lambda e: self.command())
@@ -1458,16 +1468,16 @@ def run_gui():
     x, y = (sw - w) // 2, (sh - h) // 2
     root.geometry(f"{w}x{h}+{x}+{y}")
 
-    tk.Label(root, text="▚▚  AIM  SUITE  ▞▞",
-             font=("Consolas", 24, "bold"),
-             fg=ACCENT_PINK, bg=BG).pack(pady=(30, 5))
-    tk.Label(root, text=f"v{VERSION} · valorant sens · reaction · follow",
-             font=("Consolas", 10),
+    tk.Label(root, text="AIM / TRAINING",
+             font=("Segoe UI", 26, "bold"),
+             fg=ACCENT_CYAN, bg=BG).pack(pady=(30, 5))
+    tk.Label(root, text=f"VALORANT AIM LAB  ·  VERSION {VERSION}",
+             font=("Segoe UI", 10, "bold"),
              fg=GREY, bg=BG).pack(pady=(0, 25))
 
     status = tk.Label(root, text="ready · select a mode",
                        font=("Consolas", 10),
-                       fg="#444466", bg=BG)
+                       fg=GREY, bg=BG)
 
     def launch(mode):
         exe = sys.executable
@@ -1523,7 +1533,7 @@ def run_gui():
 
     tk.Label(root, text=f"hwid: {cfg.get('hwid', '')[:16]} · build: {VERSION}",
              font=("Consolas", 8),
-             fg="#222233", bg=BG).pack(side="bottom", pady=(0, 5))
+             fg=GREY, bg=BG).pack(side="bottom", pady=(0, 5))
 
     root.mainloop()
 
